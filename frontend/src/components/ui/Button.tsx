@@ -1,5 +1,6 @@
 import React from 'react';
 
+
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
@@ -11,10 +12,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const baseStyles = 'inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-50';
     
     const variants = {
-      primary: 'bg-indigo-600 text-white hover:bg-indigo-700',
-      secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700',
-      outline: 'border border-gray-300 bg-transparent hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800',
-      ghost: 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300',
+      primary: 'bg-green-600 text-white hover:bg-green-700',
+      secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200   :bg-gray-700',
+      outline: 'border border-gray-200 bg-transparent hover:bg-gray-100  :bg-gray-800',
+      ghost: 'hover:bg-gray-100 :bg-gray-800 text-gray-700 ',
     };
 
     const sizes = {
@@ -42,3 +43,4 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   }
 );
 Button.displayName = 'Button';
+

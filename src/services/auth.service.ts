@@ -35,10 +35,21 @@ export const registerUser = async ({ name, email, password }: SignUpInput) => {
     passwordHash,
   });
 
+  await db.Sender.create({
+    userId: user.id,
+    name: user.name,
+    email: user.email,
+    smtpHost: 'smtp.ethereal.email',
+    smtpPort: 587,
+    smtpUser: 'dummy',
+    smtpPass: 'dummy'
+  });
+
   return {
     id: user.id,
     name: user.name,
     email: user.email,
+    avatarUrl: user.avatarUrl,
   };
 };
 
@@ -68,6 +79,7 @@ export const loginUser = async ({ email, password }: SignInInput) => {
     id: user.id,
     name: user.name,
     email: user.email,
+    avatarUrl: user.avatarUrl,
     token,
   };
 };
@@ -97,6 +109,16 @@ export const loginWithFirebase = async (idToken: string) => {
       avatarUrl: firebaseUser.picture || null,
       passwordHash: null,
     });
+
+    await db.Sender.create({
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      smtpHost: 'smtp.ethereal.email',
+      smtpPort: 587,
+      smtpUser: 'dummy',
+      smtpPass: 'dummy'
+    });
   } else {
     await user.update({
       firebaseUid: firebaseUser.uid,
@@ -109,6 +131,7 @@ export const loginWithFirebase = async (idToken: string) => {
     id: user.id,
     name: user.name,
     email: user.email,
+    avatarUrl: user.avatarUrl,
     token: signAuthToken({ userId: user.id, email: user.email }),
     redirectTo: '/user',
   };
