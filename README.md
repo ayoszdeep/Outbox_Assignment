@@ -29,7 +29,7 @@ MIN_DELAY_MS=2000
 MAX_EMAILS_PER_HOUR=100
 ```
 
-Firebase Admin also requires `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY`. Slack alerts require `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_REDIRECT_URI`, and `SLACK_CHANNEL_ID`.
+Firebase Admin also requires `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY`. Slack alerts require `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, and `SLACK_REDIRECT_URI`.
 
 ## Start Infrastructure
 
@@ -266,9 +266,10 @@ GET /api/slack/connect  ->  Slack authorize  ->  GET /api/slack/callback
                                     rate limit hit -> look up user's connection -> post
 ```
 
-The authorize request asks for the `incoming-webhook` scope, so the user picks the target
-channel during authorization and no `SLACK_CHANNEL_ID` has to be configured by hand. A user
-token with an explicit `SLACK_CHANNEL_ID` is supported as a fallback.
+The authorize request asks only for the `incoming-webhook` scope, so the user picks the
+target channel during authorization and no channel has to be configured by hand. The
+callback stores the webhook URL, the chosen `channel_id` and the `team_id` Slack returns,
+and alerts are plain HTTP POSTs to that webhook.
 
 Handled failures:
 

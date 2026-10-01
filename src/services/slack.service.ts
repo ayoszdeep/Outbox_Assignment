@@ -9,7 +9,10 @@ const SLACK_TIMEOUT_MS = 8000;
 /**
  * Slack is an optional, non-critical notification path.
  *
- * sendRateLimitAlert never throws: a Slack outage, a revoked token or a missing
+ * Delivery goes through an incoming webhook: the user picks the destination channel on
+ * the authorize screen, so no channel has to be configured by hand on the server.
+ *
+ * sendRateLimitAlert never throws: a Slack outage, a revoked webhook or a missing
  * connection must never fail an email job. Only the OAuth helpers throw, because
  * there a request is waiting and the error belongs in the HTTP response.
  */
@@ -17,25 +20,6 @@ export type SlackDeliveryResult = {
   delivered: boolean;
   reason?: string;
 };
-
-// Slack errors meaning the stored credential is no longer usable. The connection is
-// marked invalid so the dashboard can prompt a reconnect.
-const TOKEN_ERRORS = new Set([
-  'invalid_auth',
-  'not_authed',
-  'token_revoked',
-  'token_expired',
-  'account_inactive',
-  'invalid_token',
-]);
-
-// Slack errors meaning the credential is fine but the target channel is unreachable.
-const CHANNEL_ERRORS = new Set([
-  'channel_not_found',
-  'not_in_channel',
-  'is_archived',
-  'channel_is_archived',
-]);
 
 const markConnectionInvalid = async (userId: number, reason: string) => {
   try {
@@ -59,13 +43,13 @@ const recordConnectionError = async (userId: number, reason: string) => {
   }
 };
 
-const postJson = async (url: string, body: any, headers: Record<string, string> = {}) => {
+const postJson = async (url: string, body: any) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SLACK_TIMEOUT_MS);
   try {
     return await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8', ...headers },
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
@@ -76,18 +60,20 @@ const postJson = async (url: string, body: any, headers: Record<string, string> 
 
 export const getSlackConnectUrl = (userId: number, email: string) => {
   if (!serverConfig.SLACK_CLIENT_ID || !serverConfig.SLACK_REDIRECT_URI) {
-    throw new Error('Slack is not configured on this server. Set SLACK_CLIENT_ID and SLACK_REDIRECT_URI');
+    throw new Error(
+      'Slack is not configured on this server. Set SLACK_CLIENT_ID and SLACK_REDIRECT_URI'
+    );
   }
 
   const state = signAuthToken({ userId, email });
+
   const params = new URLSearchParams({
     client_id: serverConfig.SLACK_CLIENT_ID,
     redirect_uri: serverConfig.SLACK_REDIRECT_URI,
     state,
-    // incoming-webhook makes the channel self-configuring: the user picks it during
-    // authorize, so no SLACK_CHANNEL_ID has to be hand-set for the demo to work.
+
+    // User selects the destination channel during OAuth.
     scope: 'incoming-webhook',
-    user_scope: 'chat:write',
   });
 
   return `https://slack.com/oauth/v2/authorize?${params.toString()}`;
@@ -131,26 +117,23 @@ export const completeSlackOAuth = async (code: string, state: string) => {
     throw new Error(`Slack OAuth failed: ${result?.error || 'unknown error'}`);
   }
 
-  // Prefer the incoming webhook (channel chosen during authorize); otherwise fall back
-  // to a user token posting into an explicitly configured channel.
+  // Everything the alert path needs comes straight out of the OAuth response: the
+  // webhook to POST to, and the channel the user picked on the authorize screen.
   const webhookUrl = result.incoming_webhook?.url || null;
-  const accessToken = result.authed_user?.access_token || result.access_token || null;
-  const channelId = result.incoming_webhook?.channel_id || serverConfig.SLACK_CHANNEL_ID || null;
+  const channelId = result.incoming_webhook?.channel_id || null;
+  const channelName = result.incoming_webhook?.channel || null;
+  const teamId = result.team?.id || null;
 
-  // Nothing partial is persisted: without a usable delivery target no record is created,
-  // so a failed OAuth can never leave a half-connected row behind.
-  if (!webhookUrl && !accessToken) {
-    throw new Error('Slack did not return a usable token or webhook. Re-authorize the app');
-  }
-  if (!webhookUrl && !channelId) {
-    throw new Error('Slack returned no webhook channel. Grant the incoming-webhook scope or set SLACK_CHANNEL_ID');
+  // Nothing partial is persisted: with no webhook there is no delivery target, so a
+  // failed OAuth can never leave a half-connected row behind.
+  if (!webhookUrl) {
+    throw new Error('Slack did not return an incoming webhook. Re-authorize the app and pick a channel');
   }
 
   await db.SlackConnection.upsert({
     userId: Number(identity.userId),
-    teamId: result.team?.id || null,
+    teamId,
     channelId,
-    accessToken,
     webhookUrl,
     connectedAt: new Date(),
     // Reconnecting clears a previous failure, so alerts resume with no redeploy.
@@ -161,9 +144,9 @@ export const completeSlackOAuth = async (code: string, state: string) => {
 
   return {
     userId: Number(identity.userId),
-    teamId: result.team?.id || null,
-    channel: result.incoming_webhook?.channel || null,
-    via: webhookUrl ? 'webhook' : 'user_token',
+    teamId,
+    channelId,
+    channel: channelName,
   };
 };
 
@@ -174,7 +157,7 @@ export const getSlackStatus = async (userId: number) => {
   }
 
   return {
-    connected: connection.status === 'active' && Boolean(connection.accessToken || connection.webhookUrl),
+    connected: connection.status === 'active' && Boolean(connection.webhookUrl),
     status: connection.status,
     teamId: connection.teamId,
     channelId: connection.channelId,
@@ -219,6 +202,14 @@ export const sendRateLimitAlert = async (
     return { delivered: false, reason: 'connection_invalid' };
   }
 
+  // An active row with no webhook cannot deliver anything: ask for a reconnect.
+  if (!connection.webhookUrl) {
+    const reason = 'missing_webhook';
+    await markConnectionInvalid(userId, reason);
+    console.error('Slack connection has no webhook URL', { userId, senderId });
+    return { delivered: false, reason };
+  }
+
   const text = [
     ':warning: *Email rate limit reached*',
     `Sender: \`${senderId}\``,
@@ -226,70 +217,26 @@ export const sendRateLimitAlert = async (
     `Emails rescheduled into the next window: *${rescheduledCount}*`,
   ].join('\n');
 
-  // Webhook delivery path.
-  if (connection.webhookUrl) {
-    try {
-      const response = await postJson(connection.webhookUrl, { text });
-      if (!response.ok) {
-        const detail = await response.text().catch(() => '');
-        const reason = `webhook_${response.status}${detail ? `: ${detail.slice(0, 120)}` : ''}`;
-        // A revoked or deleted webhook returns 403/404/410: needs re-authorizing.
-        if ([403, 404, 410].includes(response.status)) {
-          await markConnectionInvalid(userId, reason);
-        } else {
-          await recordConnectionError(userId, reason);
-        }
-        console.error('Slack webhook delivery failed', { userId, senderId, reason });
-        return { delivered: false, reason };
-      }
-      return { delivered: true };
-    } catch (error: any) {
-      // Slack unreachable / timed out: log it, the email still reschedules.
-      const reason = `webhook_network_error: ${error?.message || 'unknown error'}`;
-      await recordConnectionError(userId, reason);
-      console.error('Slack webhook unreachable', { userId, senderId, reason });
-      return { delivered: false, reason };
-    }
-  }
-
-  // User-token delivery path.
-  if (!connection.channelId) {
-    const reason = 'missing_channel';
-    await recordConnectionError(userId, reason);
-    console.error('Slack connection has no channel configured', { userId, senderId });
-    return { delivered: false, reason };
-  }
-
   try {
-    const response = await postJson(
-      `${slackApi}/chat.postMessage`,
-      { channel: connection.channelId, text },
-      { Authorization: `Bearer ${connection.accessToken}` },
-    );
-    const result: any = await response.json();
-
-    if (!result?.ok) {
-      const reason = String(result?.error || 'unknown error');
-      if (TOKEN_ERRORS.has(reason)) {
-        // Token rejected: mark invalid so the dashboard can prompt a reconnect.
+    const response = await postJson(connection.webhookUrl, { text });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      const reason = `webhook_${response.status}${detail ? `: ${detail.slice(0, 120)}` : ''}`;
+      // A revoked or deleted webhook returns 403/404/410: needs re-authorizing.
+      if ([403, 404, 410].includes(response.status)) {
         await markConnectionInvalid(userId, reason);
-        console.error('Slack token rejected; connection marked invalid', { userId, senderId, reason });
-      } else if (CHANNEL_ERRORS.has(reason)) {
-        // Channel unreachable: keep the token, surface the problem.
-        await recordConnectionError(userId, reason);
-        console.error('Slack channel unreachable', { userId, senderId, reason });
       } else {
         await recordConnectionError(userId, reason);
-        console.error('Slack message failed', { userId, senderId, reason });
       }
+      console.error('Slack webhook delivery failed', { userId, senderId, reason });
       return { delivered: false, reason };
     }
-
     return { delivered: true };
   } catch (error: any) {
-    const reason = `network_error: ${error?.message || 'unknown error'}`;
+    // Slack unreachable / timed out: log it, the email still reschedules.
+    const reason = `webhook_network_error: ${error?.message || 'unknown error'}`;
     await recordConnectionError(userId, reason);
-    console.error('Slack unreachable', { userId, senderId, reason });
+    console.error('Slack webhook unreachable', { userId, senderId, reason });
     return { delivered: false, reason };
   }
 };

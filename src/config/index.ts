@@ -22,7 +22,6 @@ type ServerConfig = {
     SLACK_CLIENT_ID?: string,
     SLACK_CLIENT_SECRET?: string,
     SLACK_REDIRECT_URI?: string,
-    SLACK_CHANNEL_ID?: string,
     ELASTICSEARCH_URL?: string,
     ELASTICSEARCH_INDEX?: string,
 }
@@ -55,7 +54,6 @@ export const serverConfig: ServerConfig = {
     SLACK_CLIENT_ID: process.env.SLACK_CLIENT_ID || '',
     SLACK_CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET || '',
     SLACK_REDIRECT_URI: process.env.SLACK_REDIRECT_URI || `http://localhost:${Number(process.env.PORT) || 3001}/api/slack/callback`,
-    SLACK_CHANNEL_ID: process.env.SLACK_CHANNEL_ID || '',
     ELASTICSEARCH_URL: process.env.ELASTICSEARCH_URL || 'http://127.0.0.1:9200',
     ELASTICSEARCH_INDEX: process.env.ELASTICSEARCH_INDEX || 'emails',
 };
