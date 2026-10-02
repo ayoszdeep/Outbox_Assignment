@@ -28,5 +28,9 @@ ENV NODE_ENV=production \
 
 EXPOSE 3001
 
-# The worker service runs the same image with `npm run worker` as its command instead.
-CMD ["npm", "start"]
+# Runs the API and the worker in the same container so a single Northflank service does
+# both. Note: this couples their lifecycles — if the worker process exits, the shell script
+# exits and the whole container (API included) goes down with it. The cleaner setup is a
+# second service from this same image with its run command overridden to `npm run worker`,
+# which keeps the two independently restartable as they are in local development.
+CMD ["sh", "-c", "npm start & npm run worker"]
