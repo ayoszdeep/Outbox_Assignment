@@ -16,23 +16,24 @@ sent twice.
 2. [Architecture](#architecture)
 3. [Repository layout](#repository-layout)
 4. [Getting started](#getting-started)
-5. [Ethereal Email setup](#ethereal-email-setup)
-6. [Demo video](#demo-video)
-7. [Demo walkthrough](#demo-walkthrough)
-8. [Frontend](#frontend)
-9. [API reference](#api-reference)
-10. [Scheduling: how it works](#scheduling-how-it-works)
-11. [Throughput, rate limiting and concurrency](#throughput-rate-limiting-and-concurrency)
-12. [Idempotency and restart safety](#idempotency-and-restart-safety)
-13. [Google login](#google-login)
-14. [Slack notifications on rate-limit hits](#slack-notifications-on-rate-limit-hits)
-15. [Email search (Elasticsearch)](#email-search-elasticsearch)
-16. [Live queue dashboard (Bull Board)](#live-queue-dashboard-bull-board)
-17. [Database schema](#database-schema)
-18. [Features implemented](#features-implemented)
-19. [Requirement checklist](#requirement-checklist)
-20. [What was verified](#what-was-verified)
-21. [Assumptions, shortcuts and trade-offs](#assumptions-shortcuts-and-trade-offs)
+5. [Running in Docker](#running-in-docker)
+6. [Ethereal Email setup](#ethereal-email-setup)
+7. [Demo video](#demo-video)
+8. [Demo walkthrough](#demo-walkthrough)
+9. [Frontend](#frontend)
+10. [API reference](#api-reference)
+11. [Scheduling: how it works](#scheduling-how-it-works)
+12. [Throughput, rate limiting and concurrency](#throughput-rate-limiting-and-concurrency)
+13. [Idempotency and restart safety](#idempotency-and-restart-safety)
+14. [Google login](#google-login)
+15. [Slack notifications on rate-limit hits](#slack-notifications-on-rate-limit-hits)
+16. [Email search (Elasticsearch)](#email-search-elasticsearch)
+17. [Live queue dashboard (Bull Board)](#live-queue-dashboard-bull-board)
+18. [Database schema](#database-schema)
+19. [Features implemented](#features-implemented)
+20. [Requirement checklist](#requirement-checklist)
+21. [What was verified](#what-was-verified)
+22. [Assumptions, shortcuts and trade-offs](#assumptions-shortcuts-and-trade-offs)
 
 ---
 
@@ -50,7 +51,7 @@ sent twice.
 | Alerts | Slack OAuth v2 (`incoming-webhook` scope) |
 | Logging | Winston with daily-rotating files and a per-request correlation id |
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS 4, Redux Toolkit, React Router 7 |
-| Infra | Docker Compose for Postgres, Redis and Elasticsearch |
+| Infra | Docker Compose for Postgres, Redis and Elasticsearch; a `Dockerfile` that builds the backend image used by both the API and the worker |
 
 ---
 
@@ -118,7 +119,9 @@ frontend/
     store/           Redux Toolkit auth slice
     types/           shared API/prop interfaces
     utils/           lead-file parser (mirrors the backend parser)
-docker-compose.yml   Postgres + Redis + Elasticsearch
+docker-compose.yml   Postgres + Redis + Elasticsearch (infrastructure only)
+Dockerfile           backend image; the API and the worker are the same image, different command
+.dockerignore        keeps node_modules/, frontend/, logs/ and .env out of the build context
 ```
 
 ---
@@ -173,6 +176,9 @@ curl http://127.0.0.1:9200              # Elasticsearch info
 Compose maps Postgres to **5433**, Redis to **6390** and Elasticsearch to **9200** on the
 host, so it will not clash with local installs on the default ports.
 
+Compose starts the three backing services only. To run the API and the worker as containers too,
+see [Running in Docker](#running-in-docker); the steps below run them on the host.
+
 ### 3. Install and migrate
 
 ```bash
@@ -201,6 +207,91 @@ Bull Board   http://localhost:3001/admin/queues
 The frontend calls the API through Vite's `/api` proxy (`frontend/vite.config.ts`), so there
 is no CORS configuration in development. If you deploy the two on different origins, add a
 CORS middleware to `src/server.ts` or put both behind one reverse proxy.
+
+---
+
+## Running in Docker
+
+Two separate things are containerised, and it is worth being clear about which is which:
+
+| File | Covers | Started by |
+| --- | --- | --- |
+| `docker-compose.yml` | Postgres 16, Redis 7, Elasticsearch 8 — **infrastructure only** | `docker compose up -d` |
+| `Dockerfile` | The **backend image**. The API and the worker are the same image run with different commands | `docker build` + `docker run` (below) |
+
+The frontend is not containerised — it is excluded in `.dockerignore` and runs on the host with
+`npm run dev`. `docker compose up` therefore starts the three backing services and **not** the
+app; the API and worker containers are started explicitly as shown below.
+
+### 1. Build the image
+
+```bash
+docker build -t outbox-api:local .
+```
+
+### 2. Point the container at the Compose services
+
+Inside the Compose network the app reaches the services by **service name on their internal
+ports**, not the host-mapped ones. This is the one thing that catches people out: `.env` holds
+the host values (`127.0.0.1:5433`, `127.0.0.1:6390`), which are wrong from inside a container,
+so they are overridden on the command line.
+
+| From the host | From inside the network |
+| --- | --- |
+| `DB_HOST=127.0.0.1`, `DB_PORT=5433` | `DB_HOST=postgres`, `DB_PORT=5432` |
+| `REDIS_HOST=127.0.0.1`, `REDIS_PORT=6390` | `REDIS_HOST=redis`, `REDIS_PORT=6379` |
+| `ELASTICSEARCH_URL=http://127.0.0.1:9200` | `ELASTICSEARCH_URL=http://elasticsearch:9200` |
+
+The network is named after the project folder — `outbox_assignment_default`. Confirm yours with
+`docker network ls`.
+
+### 3. Run migrations, the API and the worker
+
+```bash
+# Migrations (one-off; the container exits when done)
+docker run --rm   --network outbox_assignment_default --env-file .env   -e DB_HOST=postgres -e DB_PORT=5432   outbox-api:local npm run db:migrate
+
+# API  → http://localhost:3001
+docker run -d --name outbox-api   --network outbox_assignment_default --env-file .env   -e DB_HOST=postgres -e DB_PORT=5432   -e REDIS_HOST=redis -e REDIS_PORT=6379   -e ELASTICSEARCH_URL=http://elasticsearch:9200   -p 3001:3001   outbox-api:local
+
+# Worker — same image, different command, no port to publish
+docker run -d --name outbox-worker   --network outbox_assignment_default --env-file .env   -e DB_HOST=postgres -e DB_PORT=5432   -e REDIS_HOST=redis -e REDIS_PORT=6379   -e ELASTICSEARCH_URL=http://elasticsearch:9200   outbox-api:local npm run worker
+```
+
+Check them:
+
+```bash
+curl http://localhost:3001/api/v1/ping/health   # OK
+docker logs outbox-api        # "PostgreSQL connection established", reconciliation, server up
+docker logs outbox-worker     # "Worker started / Waiting for jobs..."
+docker rm -f outbox-api outbox-worker           # stop and remove
+```
+
+The frontend still runs on the host and reaches the containerised API through the same Vite
+`/api` proxy, because the API is published on `localhost:3001` exactly as it is in a local run.
+
+### Why the image is built the way it is
+
+- **No `tsc` build step — the app runs from TypeScript through `ts-node`, as it does locally.**
+  `src/` also contains plain `.js` files (the Sequelize models, the migrations and the worker
+  entrypoint) and `tsconfig` has `allowJs` off, so a compiled `dist/` would be missing them and
+  would crash on first `require`.
+- **Dev dependencies are kept in the image on purpose.** `ts-node` and `typescript` run the app
+  and `sequelize-cli` runs the migrations, so a `--omit=dev` install would not boot.
+- **`python3`, `make` and `g++` are installed before `npm ci`.** `argon2` compiles from source
+  whenever no prebuilt binary matches the platform, and without the toolchain the install fails.
+- **`TS_NODE_TRANSPILE_ONLY=true`.** Types are checked in development with `npx tsc --noEmit`;
+  skipping the check at every container start keeps boot fast and stops a type error from taking
+  the service down.
+- **`node:20-bookworm-slim`** as the base, matching the Node 20+ requirement.
+
+### Known gap
+
+`docker-compose.yml` does **not** define `api` and `worker` services, so there is no
+single-command `docker compose up` that brings up the whole system — the two app containers are
+run manually as above. Adding them as two more Compose services (same `build: .`, one with
+`command: npm run worker`, both with `depends_on` the healthchecks) is the obvious next step and
+would remove the environment overrides, since Compose would inject the service names itself.
 
 ---
 
@@ -708,6 +799,9 @@ emails.
 - Slack OAuth v2 per user, with connection health, disconnect and reconnect.
 - Bull Board at `/admin/queues` for live queue visibility.
 - SMTP passwords encrypted at rest (AES-256-GCM); Winston logs with a per-request correlation id.
+- Dockerised backend: one `Dockerfile` builds the image that runs the API, the worker and the
+  migrations, alongside Compose for Postgres, Redis and Elasticsearch
+  ([Running in Docker](#running-in-docker)).
 
 ### Frontend
 
@@ -795,6 +889,11 @@ Run against the real stack (Docker Postgres + Redis + Elasticsearch, API, worker
 - `npx tsc --noEmit` (backend) and `npm run build` (frontend) both pass; `npx oxlint` reports no
   errors.
 - The Vite dev server proxies `/api` to the backend correctly.
+- `docker build -t outbox-api:local .` completes, and the resulting image was run against the
+  Compose services on the `outbox_assignment_default` network: the **API** container connected to
+  Postgres, ran reconciliation and answered `/api/v1/ping/health` with `OK`; the **worker**
+  container reached Redis and logged `Worker started / Waiting for jobs...`; and
+  `npm run db:migrate` in the same image reported the schema already up to date.
 
 Not covered by an automated test: the Slack authorize screen and the live Slack message need a
 real Slack workspace, and the Google consent screen needs a real browser session.
@@ -871,4 +970,11 @@ real Slack workspace, and the Google consent screen needs a real browser session
 # Ctrl+C the API, worker and frontend, then:
 docker compose stop        # keeps your data
 docker compose down -v     # deletes Postgres, Redis and Elasticsearch volumes
+```
+
+If you ran the API and worker as containers instead of on the host, remove those first — they are
+not part of Compose:
+
+```bash
+docker rm -f outbox-api outbox-worker
 ```
