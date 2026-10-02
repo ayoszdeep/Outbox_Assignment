@@ -28,9 +28,8 @@ ENV NODE_ENV=production \
 
 EXPOSE 3001
 
-# API only. Deploy the worker as a second Northflank service from this same image with its
-# run command overridden to `npm run worker` — this keeps the two independently restartable,
-# same as local development. A single-container "npm start & npm run worker" was tried and
-# reverted: when the worker process died, the whole container (API included) died with it,
-# producing a crash loop instead of a stable API.
-CMD ["npm", "start"]
+# API and worker run as two separate PM2 processes in one container (ecosystem.config.js),
+# so a crash in one restarts only that one instead of taking the other down with it.
+# An earlier "npm start & npm run worker" CMD coupled their lifecycles directly and caused
+# a production crash loop: when the worker died, the whole container went with it.
+CMD ["npx", "pm2-runtime", "ecosystem.config.js"]
