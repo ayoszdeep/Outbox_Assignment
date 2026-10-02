@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../../store';
 import { PenSquare, Clock, SendHorizontal, Settings } from 'lucide-react';
+import { Avatar } from '../ui/Avatar';
 
 const navItems = [
   { name: 'Compose', path: '/compose', icon: PenSquare },
@@ -25,17 +26,13 @@ export const Sidebar = () => {
         className="p-4 border-b border-gray-200 flex items-center justify-between group cursor-pointer hover:bg-green-50/60 transition-colors"
       >
         <div className="flex items-center space-x-3 overflow-hidden">
-          {user?.avatarUrl ? (
-            <img
-              src={user.avatarUrl}
-              alt={user?.name || 'User'}
-              className="w-8 h-8 rounded-full object-cover shrink-0 border border-gray-200"
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-bold shrink-0 border border-gray-200">
-              {user?.name?.charAt(0).toUpperCase() || 'U'}
-            </div>
-          )}
+          <Avatar
+            src={user?.avatarUrl}
+            name={user?.name}
+            email={user?.email}
+            className="w-8 h-8"
+            textClassName="text-sm"
+          />
           <div className="truncate">
             <p className="text-sm font-medium text-gray-900 truncate">{user?.name || 'User'}</p>
             <p className="text-xs text-gray-500 truncate">{user?.email}</p>

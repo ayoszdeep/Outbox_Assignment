@@ -6,6 +6,7 @@ import type { RootState } from '../../store';
 import { logoutAction } from '../../store/slices/authSlice';
 import { auth } from '../../lib/firebase';
 import { Button } from '../ui/Button';
+import { Avatar } from '../ui/Avatar';
 
 /**
  * Name, email, avatar and logout for the top header.
@@ -33,17 +34,13 @@ export const UserMenu = () => {
   return (
     <div className="flex items-center space-x-4 shrink-0">
       <div className="flex items-center space-x-3 overflow-hidden">
-        {user?.avatarUrl ? (
-          <img
-            src={user.avatarUrl}
-            alt={user.name || 'User avatar'}
-            className="w-9 h-9 rounded-full object-cover border border-gray-200 shrink-0"
-          />
-        ) : (
-          <div className="w-9 h-9 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-sm font-bold border border-gray-200 shrink-0">
-            {user?.name?.charAt(0).toUpperCase() || 'U'}
-          </div>
-        )}
+        <Avatar
+          src={user?.avatarUrl}
+          name={user?.name}
+          email={user?.email}
+          className="w-9 h-9"
+          textClassName="text-sm"
+        />
         <div className="hidden sm:block truncate max-w-[180px] text-right">
           <p className="text-sm font-medium text-gray-900 truncate">{user?.name || 'User'}</p>
           <p className="text-xs text-gray-500 truncate">{user?.email}</p>

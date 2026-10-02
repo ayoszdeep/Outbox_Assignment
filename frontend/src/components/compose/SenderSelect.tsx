@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { createSender, getSenders } from '../../services/emailApi';
 import type { Sender } from '../../types/email';
 import type { RootState } from '../../store';
+import { Avatar } from '../ui/Avatar';
 
 interface SenderSelectProps {
   value: string;
@@ -75,17 +76,15 @@ export const SenderSelect: React.FC<SenderSelectProps> = ({ value, onChange, err
 
   const selected = senders.find((sender) => String(sender.id) === String(value));
 
-  const avatarFor = (sender: Sender) => {
-    if (user && sender.email === user.email && user.avatarUrl) {
-      return <img src={user.avatarUrl} alt="" className="w-5 h-5 shrink-0 rounded-full object-cover" />;
-    }
-
-    return (
-      <div className="w-5 h-5 shrink-0 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-[10px] font-bold">
-        {(sender.name || sender.email).charAt(0).toUpperCase()}
-      </div>
-    );
-  };
+  const avatarFor = (sender: Sender) => (
+    <Avatar
+      src={user && sender.email === user.email ? user.avatarUrl : null}
+      name={sender.name || sender.email}
+      className="w-5 h-5"
+      textClassName="text-[10px]"
+      alt=""
+    />
+  );
 
   if (isAdding) {
     return (

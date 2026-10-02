@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { Mail, Lock } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { loginAction } from '../../store/slices/authSlice';
 import { signInWithEmail, signInWithGoogle } from '../../services/authApi';
 import type { AuthResult } from '../../types/auth';
@@ -12,6 +12,7 @@ import { GoogleButton } from './GoogleButton';
 export const LoginForm = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -84,15 +85,24 @@ export const LoginForm = () => {
           <div className="relative">
             <Input
               label="Password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               required
               minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="pl-10"
+              className="pl-10 pr-11"
             />
             <Lock className="w-5 h-5 text-gray-400 absolute left-3 top-9" />
+            <button
+              type="button"
+              onClick={() => setShowPassword((visible) => !visible)}
+              className="absolute right-3 top-9 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              title={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
           </div>
         </div>
 
