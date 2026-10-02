@@ -19,8 +19,8 @@ export const fetchApi = async (endpoint: string, options: RequestInit = {}) => {
     try {
       const errorData = await response.json();
       errorMsg = errorData.error || errorData.message || errorMsg;
-    } catch (e) {
-      // Not JSON
+    } catch {
+      // Response body was not JSON; keep the generic message.
     }
     throw new Error(errorMsg);
   }

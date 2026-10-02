@@ -1,27 +1,43 @@
 import { emailSchedulerQueue } from '../queues/mailer.queues';
 import { indexEmail } from './email-search.service';
+import { serverConfig } from '../config';
 const db: any = require('../db/models');
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Pulls every email address out of an uploaded CSV / text lead list.
+ *
+ * Deliberately tolerant, because lead lists are not written by us: a file may or may not
+ * have a header row, may have one column or several (`name,email,company`), may be comma,
+ * semicolon or tab separated, and often arrives with a UTF-8 BOM. Rather than assume a
+ * layout, every cell is tested and only the ones that look like an address are kept, so a
+ * header is ignored without also throwing away a file that has no header at all.
+ *
+ * Duplicates are collapsed, so one campaign can never mail the same person twice.
+ */
+export const parseLeadEmails = (text: string) => {
+  const lines = text.replace(/^﻿/, '').split(/\r?\n/);
+  const emails: string[] = [];
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    for (const cell of line.split(/[,;\t]/)) {
+      const candidate = cell.trim().replace(/^["']|["']$/g, '');
+      if (emailRegex.test(candidate)) emails.push(candidate.toLowerCase());
+    }
+  }
+
+  return Array.from(new Set(emails));
+};
 
 const parseCsvEmails = (file: Express.Multer.File | undefined) => {
   if (!file || !file.buffer || file.buffer.length === 0) {
     throw new Error('CSV file is required');
   }
 
-  const text = file.buffer.toString('utf8');
-  const rows = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-
-  if (rows.length < 2) {
-    throw new Error('CSV file must contain at least one email row');
-  }
-
-  const emails = rows.slice(1).map((row) => row.replace(/^"|"$/g, '').trim());
-
-  const unique = Array.from(new Set(emails.filter(Boolean)));
-  const valid = unique.filter((email) => emailRegex.test(email));
-
-  return valid;
+  return parseLeadEmails(file.buffer.toString('utf8'));
 };
 
 const getDateFromInput = (value: string) => {
@@ -37,8 +53,14 @@ export const scheduleCampaign = async (userId: number, data: any, file?: Express
   const body = String(data?.body || '').trim();
   const senderId = Number(data?.senderId);
   const startTime = data?.startTime ? getDateFromInput(data.startTime) : null;
-  const delayMs = Number(data?.delayMs);
-  const hourlyLimit = Number(data?.hourlyLimit);
+  // Pacing is optional on the request: when it is left out the configured defaults apply
+  // instead of the request being rejected, and nothing is hardcoded here.
+  const delayMs = data?.delayMs === undefined || data?.delayMs === null || data?.delayMs === ''
+    ? Number(serverConfig.MIN_DELAY_MS)
+    : Number(data.delayMs);
+  const hourlyLimit = data?.hourlyLimit === undefined || data?.hourlyLimit === null || data?.hourlyLimit === ''
+    ? Number(serverConfig.MAX_EMAILS_PER_HOUR)
+    : Number(data.hourlyLimit);
 
   if (!subject) throw new Error('subject is required');
   if (!body) throw new Error('body is required');

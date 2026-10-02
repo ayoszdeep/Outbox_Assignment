@@ -2,16 +2,18 @@ services:
   postgres:
     image: postgres:16
     container_name: notification-postgres
+    # Credentials come from the root .env (Compose loads it automatically), so no password
+    # is committed and the container always matches what the app connects with.
     environment:
-      POSTGRES_DB: Email_Scheduler
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ayosz2004
+      POSTGRES_DB: ${DB_NAME:-Email_Scheduler}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
     ports:
-      - "5433:5432"
+      - "${DB_PORT:-5433}:5432"
     volumes:
       - notification-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d Email_Scheduler"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-Email_Scheduler}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -20,7 +22,7 @@ services:
     image: redis:7
     container_name: redis
     ports:
-      - "6390:6379"
+      - "${REDIS_PORT:-6390}:6379"
     volumes:
       - notification-redis-data:/data
     command: redis-server --appendonly yes

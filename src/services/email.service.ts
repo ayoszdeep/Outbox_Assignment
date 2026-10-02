@@ -28,6 +28,20 @@ export const listEmails = async (userId: number, status?: string, page = 1, limi
   };
 };
 
+/**
+ * Single email, with its sender attached so the detail view can show who it went out as
+ * and why it failed. Scoped by userId so one account can never read another's email.
+ */
+export const getEmailById = async (userId: number, emailId: number) => {
+  const email = await db.Email.findOne({
+    where: { id: emailId, userId },
+    attributes: ['id', 'recipient', 'subject', 'body', 'senderId', 'campaignId', 'sequenceNumber', 'scheduledAt', 'sentAt', 'status', 'attempts', 'errorMessage', 'bullJobId', 'createdAt'],
+    include: [{ model: db.Sender, as: 'sender', attributes: ['id', 'name', 'email'] }],
+  });
+
+  return email;
+};
+
 export const scheduleSingleEmail = async (userId: number, data: any) => {
   const recipient = String(data?.recipient || '').trim();
   const subject = String(data?.subject || '').trim();

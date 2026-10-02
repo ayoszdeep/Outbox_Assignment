@@ -5,8 +5,6 @@ type ServerConfig = {
     PORT: number,
     REDIS_PORT?: number,
     REDIS_HOST?: string,
-    MAIL_PASS?: string,
-    MAIL_USER?: string,
     DB_HOST?: string,
     DB_PORT?: number,
     DB_NAME?: string,
@@ -22,6 +20,7 @@ type ServerConfig = {
     SLACK_CLIENT_ID?: string,
     SLACK_CLIENT_SECRET?: string,
     SLACK_REDIRECT_URI?: string,
+    FRONTEND_URL?: string,
     ELASTICSEARCH_URL?: string,
     ELASTICSEARCH_INDEX?: string,
 }
@@ -37,8 +36,6 @@ export const serverConfig: ServerConfig = {
     PORT: Number(process.env.PORT) || 3001,
     REDIS_PORT: process.env.REDIS_PORT ? Number(process.env.REDIS_PORT) : 6379,
     REDIS_HOST: process.env.REDIS_HOST || 'localhost',
-    MAIL_PASS: process.env.EMAIL_PASS || '',
-    MAIL_USER: process.env.EMAIL_USER || '',
     DB_HOST: process.env.DB_HOST || 'localhost',
     DB_PORT: process.env.DB_PORT ? Number(process.env.DB_PORT) : 5432,
     DB_NAME: process.env.DB_NAME || 'postgres',
@@ -54,6 +51,7 @@ export const serverConfig: ServerConfig = {
     SLACK_CLIENT_ID: process.env.SLACK_CLIENT_ID || '',
     SLACK_CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET || '',
     SLACK_REDIRECT_URI: process.env.SLACK_REDIRECT_URI || `http://localhost:${Number(process.env.PORT) || 3001}/api/slack/callback`,
+    FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3005',
     ELASTICSEARCH_URL: process.env.ELASTICSEARCH_URL || 'http://127.0.0.1:9200',
     ELASTICSEARCH_INDEX: process.env.ELASTICSEARCH_INDEX || 'emails',
 };

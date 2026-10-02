@@ -1,38 +1,61 @@
-export const parseEmailsFromFile = async (file: File): Promise<{ valid: number; invalid: number; duplicates: number }> => {
-  return new Promise((resolve, reject) => {
+export interface LeadFileStats {
+  /** Unique, valid addresses - this is the number of emails that will actually be scheduled. */
+  valid: number;
+  /** Non-empty rows that contained no address at all (a header row is not counted). */
+  invalid: number;
+  duplicates: number;
+}
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Counts the addresses in a lead file, using the same rules as the backend parser in
+ * `src/services/campaign.service.ts`, so the count shown in Compose is the count that gets
+ * scheduled: BOM stripped, any of comma / semicolon / tab as a separator, every cell tested
+ * so extra columns and an optional header row look after themselves, duplicates collapsed.
+ */
+export const parseLeadText = (text: string): LeadFileStats => {
+  const lines = text.replace(/^﻿/, '').split(/\r?\n/);
+  const unique = new Set<string>();
+  let duplicates = 0;
+  let invalid = 0;
+  let isFirstContentLine = true;
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    let foundOnThisLine = 0;
+
+    for (const cell of line.split(/[,;\t]/)) {
+      const candidate = cell.trim().replace(/^["']|["']$/g, '').toLowerCase();
+      if (!EMAIL_REGEX.test(candidate)) continue;
+
+      foundOnThisLine += 1;
+      if (unique.has(candidate)) {
+        duplicates += 1;
+      } else {
+        unique.add(candidate);
+      }
+    }
+
+    // A first line with no address is a header, not a bad row.
+    if (foundOnThisLine === 0 && !isFirstContentLine) invalid += 1;
+    isFirstContentLine = false;
+  }
+
+  return { valid: unique.size, invalid, duplicates };
+};
+
+export const parseEmailsFromFile = (file: File): Promise<LeadFileStats> =>
+  new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = (event) => {
       try {
-        const text = e.target?.result as string;
-        // Basic parsing: split by newlines, commas, or semicolons
-        const rawItems = text.split(/[\n,;]+/).map(item => item.trim()).filter(Boolean);
-        
-        let valid = 0;
-        let invalid = 0;
-        let duplicates = 0;
-        const uniqueEmails = new Set<string>();
-
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-        rawItems.forEach(item => {
-          if (emailRegex.test(item)) {
-            if (uniqueEmails.has(item)) {
-              duplicates++;
-            } else {
-              uniqueEmails.add(item);
-              valid++;
-            }
-          } else {
-            invalid++;
-          }
-        });
-
-        resolve({ valid, invalid, duplicates });
+        resolve(parseLeadText(String(event.target?.result ?? '')));
       } catch (error) {
-        reject(error);
+        reject(error instanceof Error ? error : new Error('Failed to parse file'));
       }
     };
     reader.onerror = () => reject(new Error('Failed to read file'));
     reader.readAsText(file);
   });
-};

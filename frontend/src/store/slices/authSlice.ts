@@ -1,11 +1,7 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import type { User } from '../../types/auth';
 
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  avatarUrl?: string | null;
-}
+export type { User };
 
 export interface AuthState {
   user: User | null;
@@ -13,23 +9,32 @@ export interface AuthState {
   isAuthenticated: boolean;
 }
 
+const emptyState: AuthState = {
+  user: null,
+  token: null,
+  isAuthenticated: false,
+};
+
 const getInitialState = (): AuthState => {
   const storedToken = localStorage.getItem('token');
   const storedUser = localStorage.getItem('user');
 
-  if (storedToken && storedUser) {
+  if (!storedToken || !storedUser) {
+    return emptyState;
+  }
+
+  // A half-written or stale `user` entry must not take the whole dashboard down on load.
+  try {
     return {
-      user: JSON.parse(storedUser),
+      user: JSON.parse(storedUser) as User,
       token: storedToken,
       isAuthenticated: true,
     };
+  } catch {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    return emptyState;
   }
-
-  return {
-    user: null,
-    token: null,
-    isAuthenticated: false,
-  };
 };
 
 const authSlice = createSlice({

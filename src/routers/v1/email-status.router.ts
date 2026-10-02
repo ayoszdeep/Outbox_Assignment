@@ -1,6 +1,6 @@
 import express from 'express';
 import { requireAuth, AuthenticatedRequest } from '../../middlewares/auth.middleware';
-import { listEmails, scheduleSingleEmail } from '../../services/email.service';
+import { getEmailById, listEmails, scheduleSingleEmail } from '../../services/email.service';
 import { searchIndexedEmails } from '../../services/email-search.service';
 
 const emailStatusRouter = express.Router();
@@ -40,6 +40,29 @@ emailStatusRouter.get('/search', async (req: AuthenticatedRequest, res) => {
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(503).json({ success: false, message: 'Email search is unavailable' });
+  }
+});
+
+// Declared last so it cannot shadow /search.
+emailStatusRouter.get('/:id', async (req: AuthenticatedRequest, res) => {
+  const emailId = Number(req.params.id);
+
+  if (!Number.isInteger(emailId) || emailId <= 0) {
+    res.status(400).json({ success: false, message: 'Invalid email id' });
+    return;
+  }
+
+  try {
+    const email = await getEmailById(req.user!.userId, emailId);
+
+    if (!email) {
+      res.status(404).json({ success: false, message: 'Email not found' });
+      return;
+    }
+
+    res.json({ success: true, data: email });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error instanceof Error ? error.message : 'Failed to load email' });
   }
 });
 

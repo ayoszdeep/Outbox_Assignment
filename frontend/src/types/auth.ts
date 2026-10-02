@@ -2,12 +2,19 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  avatarUrl?: string | null;
 }
 
-export interface AuthContextType {
-  user: User | null;
-  token: string | null;
-  isAuthenticated: boolean;
-  login: (user: User, token: string) => void;
-  logout: () => void;
+/** `data` payload of the backend's signin / signup / firebase auth responses. */
+export interface AuthPayload {
+  id: number | string;
+  name: string;
+  email: string;
+  avatarUrl?: string | null;
+  token: string;
+}
+
+export interface AuthResult {
+  user: User;
+  token: string;
 }

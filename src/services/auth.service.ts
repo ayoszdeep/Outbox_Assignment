@@ -1,6 +1,8 @@
 import { hash, verify } from 'argon2';
 import { signAuthToken } from '../utils/jwt';
 import { verifyFirebaseIdToken } from '../config/firebase-admin';
+import { createSender } from './sender.service';
+import logger from '../config/logger.config';
 const db = require('../db/models');
 
 export type SignUpInput = {
@@ -15,6 +17,25 @@ export type SignInInput = {
 };
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
+
+/**
+ * Every new account gets one real, working Ethereal sender so the dashboard is usable
+ * straight after the first login.
+ *
+ * Ethereal is a third-party service, so this is deliberately non-fatal: if it cannot be
+ * reached we log it and let the signup succeed. The user can still add a sender from the
+ * Compose screen, which runs the same code path.
+ */
+const provisionDefaultSender = async (user: any) => {
+  try {
+    await createSender(user.id, { name: user.name });
+  } catch (error) {
+    logger.error('Could not provision a default Ethereal sender for the new user', {
+      userId: user.id,
+      message: error instanceof Error ? error.message : 'unknown error',
+    });
+  }
+};
 
 export const registerUser = async ({ name, email, password }: SignUpInput) => {
   const normalizedEmail = normalizeEmail(email);
@@ -35,15 +56,7 @@ export const registerUser = async ({ name, email, password }: SignUpInput) => {
     passwordHash,
   });
 
-  await db.Sender.create({
-    userId: user.id,
-    name: user.name,
-    email: user.email,
-    smtpHost: 'smtp.ethereal.email',
-    smtpPort: 587,
-    smtpUser: 'dummy',
-    smtpPass: 'dummy'
-  });
+  await provisionDefaultSender(user);
 
   return {
     id: user.id,
@@ -110,15 +123,7 @@ export const loginWithFirebase = async (idToken: string) => {
       passwordHash: null,
     });
 
-    await db.Sender.create({
-      userId: user.id,
-      name: user.name,
-      email: user.email,
-      smtpHost: 'smtp.ethereal.email',
-      smtpPort: 587,
-      smtpUser: 'dummy',
-      smtpPass: 'dummy'
-    });
+    await provisionDefaultSender(user);
   } else {
     await user.update({
       firebaseUid: firebaseUser.uid,
@@ -133,6 +138,6 @@ export const loginWithFirebase = async (idToken: string) => {
     email: user.email,
     avatarUrl: user.avatarUrl,
     token: signAuthToken({ userId: user.id, email: user.email }),
-    redirectTo: '/user',
+    redirectTo: '/dashboard',
   };
 };

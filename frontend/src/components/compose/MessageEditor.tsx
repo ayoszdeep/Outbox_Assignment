@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect } from 'react';
-import { Undo, Redo, Type, Bold, Italic, Underline, AlignLeft, List, ListOrdered, Indent, Outdent, Quote, Paperclip, Link, Strikethrough } from 'lucide-react';
+import { Undo, Redo, Type, Bold, Italic, Underline, AlignLeft, List, ListOrdered, Indent, Outdent, Quote, Paperclip, Strikethrough } from 'lucide-react';
 
 interface MessageEditorProps {
   value: string;
