@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import { serverConfig } from './config';
 import v1Router from './routers/v1/index.router';
 import { appErrorHandler, genericErrorHandler } from './middlewares/error.middleware';
@@ -20,6 +21,14 @@ createBullBoard({
     queues: [new BullMQAdapter(emailSchedulerQueue)],
     serverAdapter: bullBoardAdapter,
 });
+
+// Allows the deployed frontend (a different origin on Vercel) to call this API.
+// FRONTEND_URL already exists for the Slack OAuth redirect, reused here as the one
+// trusted origin; credentials:true because the Authorization header is sent on every call.
+app.use(cors({
+    origin: serverConfig.FRONTEND_URL,
+    credentials: true,
+}));
 
 app.use(express.json());
 

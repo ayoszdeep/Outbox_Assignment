@@ -1,4 +1,7 @@
-export const API_BASE_URL = '/api/v1';
+// Falls back to '' so local dev keeps going through Vite's /api proxy unchanged; in
+// production VITE_API_URL points straight at the deployed backend origin.
+export const API_ROOT = import.meta.env.VITE_API_URL || '';
+export const API_BASE_URL = `${API_ROOT}/api/v1`;
 
 export const fetchApi = async (endpoint: string, options: RequestInit = {}) => {
   const token = localStorage.getItem('token');

@@ -1,9 +1,10 @@
 import type { ApiResponse, SlackStatus } from '../types/email';
+import { API_ROOT } from './api';
 
 const slackFetch = async <T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> => {
   const token = localStorage.getItem('token');
 
-  const response = await fetch(`/api/slack${endpoint}`, {
+  const response = await fetch(`${API_ROOT}/api/slack${endpoint}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',

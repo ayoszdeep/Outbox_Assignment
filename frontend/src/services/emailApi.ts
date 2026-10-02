@@ -1,4 +1,4 @@
-import { fetchApi } from './api';
+import { API_BASE_URL, fetchApi } from './api';
 import type {
   ApiResponse,
   EmailDetail,
@@ -38,7 +38,7 @@ export const createSender = (name: string) =>
 export const scheduleCampaign = async (formData: FormData): Promise<ApiResponse<ScheduleCampaignResult>> => {
   const token = localStorage.getItem('token');
 
-  const response = await fetch('/api/v1/campaigns/schedule', {
+  const response = await fetch(`${API_BASE_URL}/campaigns/schedule`, {
     method: 'POST',
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: formData,

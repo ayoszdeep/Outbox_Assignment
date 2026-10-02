@@ -1,8 +1,9 @@
 import { auth, googleProvider, signInWithPopup } from '../lib/firebase';
 import type { AuthPayload, AuthResult } from '../types/auth';
+import { API_BASE_URL } from './api';
 
 const post = async (endpoint: string, body: unknown): Promise<AuthPayload> => {
-  const response = await fetch(`/api/v1${endpoint}`, {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
